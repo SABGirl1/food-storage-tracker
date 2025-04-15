@@ -2,61 +2,74 @@ import streamlit as st
 import pandas as pd
 import os
 
-# File to store the inventory
-data_file = "inventory.csv"
+# CSV file for saving data
+DATA_FILE = 'inventory.csv'
 
-# Initialize inventory if file doesn't exist
-if not os.path.exists(data_file):
-    df = pd.DataFrame(columns=["Item Name", "Quantity", "Max Quantity", "Threshold"])
-    df.to_csv(data_file, index=False)
+# Load inventory from CSV
+def load_inventory():
+    if os.path.exists(DATA_FILE):
+        return pd.read_csv(DATA_FILE)
+    else:
+        return pd.DataFrame(columns=['Item Name', 'Quantity', 'Max Quantity', 'Item Type'])
 
-# Load inventory
-df = pd.read_csv(data_file)
+# Save inventory to CSV
+def save_inventory(df):
+    df.to_csv(DATA_FILE, index=False)
 
-# Sidebar Navigation
-page = st.sidebar.selectbox("Select Page", ["Inventory", "Grocery List"])
+# Add a new item
+def add_item(item_name, quantity, max_quantity, item_type):
+    df = load_inventory()
+    new_item = pd.DataFrame([{
+        'Item Name': item_name,
+        'Quantity': quantity,
+        'Max Quantity': max_quantity,
+        'Item Type': item_type
+    }])
+    df = pd.concat([df, new_item], ignore_index=True)
+    save_inventory(df)
 
-if page == "Inventory":
-    st.title("🗃️ Food Storage Inventory")
+# Generate grocery list
+def generate_grocery_list(df):
+    grocery_list = df[df['Quantity'] < df['Max Quantity']].copy()
+    grocery_list['Need to Buy'] = grocery_list['Max Quantity'] - grocery_list['Quantity']
+    return grocery_list[['Item Name', 'Item Type', 'Quantity', 'Max Quantity', 'Need to Buy']]
 
-    st.subheader("Add or Update an Item")
-    name = st.text_input("Item Name")
-    quantity = st.number_input("Current Quantity", min_value=0, value=0)
-    max_quantity = st.number_input("Max Quantity", min_value=1, value=1)
-    threshold = st.number_input("Threshold", min_value=0, value=0)
+# Streamlit UI
+st.title("🧃 Food Storage Tracker")
 
-    if st.button("Add / Update Item"):
-        if name.strip():
-            df = df[df['Item Name'] != name]  # Remove duplicates
-            df = df.append({
-                "Item Name": name,
-                "Quantity": quantity,
-                "Max Quantity": max_quantity,
-                "Threshold": threshold
-            }, ignore_index=True)
-            df.to_csv(data_file, index=False)
-            st.success(f"'{name}' has been added/updated!")
+menu = st.sidebar.radio("Navigate", ["Inventory", "Grocery List"])
+
+if menu == "Inventory":
+    st.header("📋 Current Inventory")
+
+    df = load_inventory()
+    st.dataframe(df)
+
+    st.subheader("➕ Add New Item")
+
+    item_name = st.text_input("Item Name")
+    quantity = st.number_input("Current Quantity", min_value=0, step=1)
+    max_quantity = st.number_input("Max Quantity", min_value=1, step=1)
+
+    item_type = st.selectbox("Item Type", [
+        "Can", "Package", "Bottle", "Jar", "Bag", "Frozen", "Tub", "Loose/Bulk"
+    ])
+
+    if st.button("Add Item"):
+        if item_name.strip() != "":
+            add_item(item_name.strip(), quantity, max_quantity, item_type)
+            st.success(f"Added {item_name} ({item_type}) to inventory!")
         else:
             st.error("Please enter an item name.")
 
-    st.subheader("Current Inventory")
-    st.table(df)
+elif menu == "Grocery List":
+    st.header("🛒 Grocery List")
 
-elif page == "Grocery List":
-    st.title("🛒 Grocery List")
+    df = load_inventory()
+    grocery_list = generate_grocery_list(df)
 
-    if df.empty:
-        st.info("Inventory is empty. Add items on the Inventory page.")
+    if grocery_list.empty:
+        st.success("Your stock is full — no need to buy anything! ✅")
     else:
-        grocery_items = []
-        for _, row in df.iterrows():
-            if row['Quantity'] <= row['Threshold']:
-                to_buy = row['Max Quantity'] - row['Quantity']
-                grocery_items.append(f"- {row['Item Name']}: Buy {to_buy} (Current: {int(row['Quantity'])} / Max: {int(row['Max Quantity'])})")
+        st.table(grocery_list)
 
-        if grocery_items:
-            st.write("### Items to Restock:")
-            for item in grocery_items:
-                st.write(item)
-        else:
-            st.success("✅ All stocked up!")
