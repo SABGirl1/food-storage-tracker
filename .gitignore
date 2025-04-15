@@ -1,0 +1,9 @@
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore local Streamlit secrets
+.streamlit/
+
+# Ignore your data file
+inventory.csv
